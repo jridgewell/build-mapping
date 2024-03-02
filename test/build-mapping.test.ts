@@ -1,5 +1,5 @@
 import { strict as assert } from 'assert';
-import { build, sectionedSourceMap, BuiltCode } from '../src/build-mapping';
+import { build, sectionedSourceMap, type BuiltCode } from '../src/build-mapping';
 
 describe('BuildMapping', () => {
   const builtCode: BuiltCode = {
