@@ -1,5 +1,6 @@
 import { strict as assert } from 'assert';
 import { build, type BuiltCode } from '../src/build-mapping';
+import { AnyMap, originalPositionFor } from '@jridgewell/trace-mapping';
 
 describe('BuildMapping', () => {
   const builtCode: BuiltCode = {
@@ -81,6 +82,21 @@ describe('BuildMapping', () => {
         { offset: { line: 2, column: 6 }, map: builtCode.map },
         { offset: { line: 2, column: 9 }, map: EMPTY_MAP },
       ],
+    });
+  });
+
+  it('input to AnyMap', () => {
+    const { map } = build`
+      ${builtCode}
+    `;
+
+    const tracer = AnyMap(map);
+
+    assert.deepEqual(originalPositionFor(tracer, { line: 2, column: 6 }), {
+      source: 'foo.js',
+      line: 1,
+      column: 0,
+      name: null,
     });
   });
 });
