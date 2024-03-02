@@ -1,5 +1,5 @@
 import { strict as assert } from 'assert';
-import { build, sectionedSourceMap, type BuiltCode } from '../src/build-mapping';
+import { build, type BuiltCode } from '../src/build-mapping';
 
 describe('BuildMapping', () => {
   const builtCode: BuiltCode = {
@@ -24,14 +24,14 @@ describe('BuildMapping', () => {
     `;
 
     assert.equal(built.code, '\n      foo\n    ');
-    assert.deepEqual(sectionedSourceMap(built), { version: 3, sections: [] });
+    assert.deepEqual(built.map, { version: 3, sections: [] });
   });
 
   it('builds sourced code', () => {
     const built = build`${builtCode}`;
 
     assert.equal(built.code, 'foo');
-    assert.deepEqual(sectionedSourceMap(built), {
+    assert.deepEqual(built.map, {
       version: 3,
       sections: [{ offset: { line: 0, column: 0 }, map: builtCode.map }],
     });
@@ -43,7 +43,7 @@ describe('BuildMapping', () => {
     `;
 
     assert.equal(built.code, '\n      foobar baz\n    ');
-    assert.deepEqual(sectionedSourceMap(built), {
+    assert.deepEqual(built.map, {
       version: 3,
       sections: [],
     });
@@ -55,7 +55,7 @@ describe('BuildMapping', () => {
     `;
 
     assert.equal(built.code, '\n      foofoo foo\n    ');
-    assert.deepEqual(sectionedSourceMap(built), {
+    assert.deepEqual(built.map, {
       version: 3,
       sections: [
         { offset: { line: 1, column: 6 }, map: builtCode.map },
@@ -75,7 +75,7 @@ describe('BuildMapping', () => {
     `;
 
     assert.equal(built.code, '\n      bar\n      foo\n      baz\n    ');
-    assert.deepEqual(sectionedSourceMap(built), {
+    assert.deepEqual(built.map, {
       version: 3,
       sections: [
         { offset: { line: 2, column: 6 }, map: builtCode.map },
