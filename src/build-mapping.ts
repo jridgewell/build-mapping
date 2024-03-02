@@ -1,5 +1,7 @@
+import { TraceMap, encodedMap } from '@jridgewell/trace-mapping';
 import type {
   DecodedSourceMap,
+  EncodedSourceMap,
   SectionedSourceMapInput,
   SectionedSourceMapXInput,
   SectionXInput,
@@ -9,6 +11,21 @@ export type DynamicCode = string | BuiltCode;
 export type BuiltCode = {
   code: string;
   map: SectionedSourceMapInput;
+};
+
+export type NormalizedSourceMap = EncodedSourceMap | NormalizedSectionedSourceMap;
+export interface NormalizedSectionedSourceMap {
+  file?: string | null;
+  sections: NormalizedSection[];
+  version: 3;
+}
+export interface NormalizedSection {
+  offset: { line: number; column: number };
+  map: EncodedSourceMap | NormalizedSectionedSourceMap;
+}
+export type NormalizedBuiltCode = {
+  code: string;
+  map: NormalizedSourceMap;
 };
 
 const NEWLINE = '\n'.charCodeAt(0);
@@ -33,12 +50,21 @@ let lastIsSourceless = true;
 // We use a call interface instead of the regular function types, allowing us to publicly advertise
 // the rest args without actually constructing it.
 interface Builder {
-  (strings: TemplateStringsArray, ...args: DynamicCode[]): {
+  (
+    strings: TemplateStringsArray,
+    ...args: DynamicCode[]
+  ): {
     code: string;
     map: SectionedSourceMapXInput;
   };
 }
 
+/**
+ * Builds a combined source and source map from many inputs.
+ *
+ * **Note** that the output of this function is only compatible with `@jridgewell/trace-mapping`. If
+ * you wish to use this with another library, call `normalize`.
+ */
 export const build: Builder = function (strings) {
   let code = strings[0];
   const sections: SectionXInput[] = [];
@@ -62,6 +88,14 @@ export const build: Builder = function (strings) {
   const map = { version: 3 as const, sections };
   return { code, map };
 };
+
+/**
+ * Normalizes the output of `build` to be compatible with any library that supports source maps.
+ */
+export function normalize(built: BuiltCode): NormalizedBuiltCode {
+  const { code, map } = built;
+  return { code, map: normalizeMap(map) };
+}
 
 // Scans code looking for newlines, recording the current line number and final column number.
 function updatePosition(code: string) {
@@ -105,4 +139,21 @@ function pushSource(code: string, value: BuiltCode, sections: SectionXInput[]): 
 
   updatePosition(c);
   return code + c;
+}
+
+function normalizeMap(map: SectionedSourceMapInput): NormalizedSourceMap {
+  const parsed: Exclude<SectionedSourceMapInput, string> =
+    typeof map === 'string' ? JSON.parse(map) : map;
+
+  if ('sections' in parsed) return normalizeSectionedMap(parsed);
+  return encodedMap(new TraceMap(parsed));
+}
+function normalizeSectionedMap(map: SectionedSourceMapXInput): NormalizedSectionedSourceMap {
+  const { file, version, sections } = map;
+  return { file, version, sections: sections.map(normalizeSection) };
+}
+
+function normalizeSection(section: SectionXInput): NormalizedSection {
+  const { offset, map } = section;
+  return { offset, map: normalizeMap(map) };
 }
