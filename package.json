@@ -1,6 +1,6 @@
 {
   "name": "@jridgewell/build-mapping",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Build source and source maps",
   "keywords": [
     "source",
