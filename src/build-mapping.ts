@@ -97,6 +97,17 @@ export function normalize(built: BuiltCode): NormalizedBuiltCode {
   return { code, map: normalizeMap(map) };
 }
 
+/**
+ * Normalizes the map output of `build` to be compatible with any library that supports source maps.
+ */
+export function normalizeMap(map: SectionedSourceMapInput): NormalizedSourceMap {
+  const parsed: Exclude<SectionedSourceMapInput, string> =
+    typeof map === 'string' ? JSON.parse(map) : map;
+
+  if ('sections' in parsed) return normalizeSectionedMap(parsed);
+  return encodedMap(new TraceMap(parsed));
+}
+
 // Scans code looking for newlines, recording the current line number and final column number.
 function updatePosition(code: string) {
   let lastNewline = -1;
@@ -141,13 +152,6 @@ function pushSource(code: string, value: BuiltCode, sections: SectionXInput[]): 
   return code + c;
 }
 
-function normalizeMap(map: SectionedSourceMapInput): NormalizedSourceMap {
-  const parsed: Exclude<SectionedSourceMapInput, string> =
-    typeof map === 'string' ? JSON.parse(map) : map;
-
-  if ('sections' in parsed) return normalizeSectionedMap(parsed);
-  return encodedMap(new TraceMap(parsed));
-}
 function normalizeSectionedMap(map: SectionedSourceMapXInput): NormalizedSectionedSourceMap {
   const { file, version, sections } = map;
   return { file, version, sections: sections.map(normalizeSection) };
