@@ -65,6 +65,6 @@
     "typescript": "5.3.3"
   },
   "dependencies": {
-    "@jridgewell/trace-mapping": "0.3.25"
+    "@jridgewell/trace-mapping": "^0.3.25"
   }
 }
