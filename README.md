@@ -13,7 +13,7 @@ npm install @jridgewell/build-mapping
 ## Usage
 
 ```typescript
-import { build } from '@jridgewell/build-mapping';
+import { build, unnormalizedBuild } from '@jridgewell/build-mapping';
 
 const input = transformFileSync('input.js')
 const { code, map } = build`foo ${input} bar`;
@@ -28,6 +28,8 @@ assert.deepEqual(map, {
 });
 
 
+// If you're using @jridgewell/trace-mapping's `AnyMap`, you can use a faster unnormalized builder:
+const { code: sameCode, map: unnormalized } = unnormalizedBuild`foo ${input} bar`;
 
 
 

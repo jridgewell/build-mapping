@@ -1,6 +1,12 @@
 import { strict as assert } from 'assert';
-import { build, unnormalizedBuild } from '../src/build-mapping';
-import { AnyMap, originalPositionFor, TraceMap, encodedMap } from '@jridgewell/trace-mapping';
+import { build, normalizeMap, unnormalizedBuild } from '../src/build-mapping';
+import {
+  AnyMap,
+  originalPositionFor,
+  TraceMap,
+  encodedMap,
+  decodedMap,
+} from '@jridgewell/trace-mapping';
 
 describe('BuildMapping', () => {
   const builtCode = {
@@ -107,6 +113,45 @@ describe('BuildMapping', () => {
         name: null,
       });
     });
+
+    it('normalizes SectionedSourceMapInput', () => {
+      const built = build`
+        ${builtCode}
+        ${{ code: builtCode.code, map: JSON.stringify(builtCode.map) }}
+        ${build`
+          ${{ code: builtCode.code, map: tracer }}
+          ${{ code: builtCode.code, map: decodedMap(tracer) as any }}
+        `}
+      `;
+      const normalizedEmptyMap = encodedMap(new TraceMap(emptyMap));
+
+      // @ts-expect-error output of build is already normalized
+      const normalized = normalizeMap(built.map);
+      assert.deepEqual(normalized, {
+        version: 3,
+        file: undefined,
+        sections: [
+          { offset: { line: 1, column: 8 }, map: normalizedBuiltMap },
+          { offset: { line: 1, column: 11 }, map: normalizedEmptyMap },
+          { offset: { line: 2, column: 8 }, map: normalizedBuiltMap },
+          { offset: { line: 2, column: 11 }, map: normalizedEmptyMap },
+          {
+            offset: { line: 3, column: 8 },
+            map: {
+              version: 3,
+              file: undefined,
+              sections: [
+                { offset: { line: 1, column: 10 }, map: normalizedBuiltMap },
+                { offset: { line: 1, column: 13 }, map: normalizedEmptyMap },
+                { offset: { line: 2, column: 10 }, map: normalizedBuiltMap },
+                { offset: { line: 2, column: 13 }, map: normalizedEmptyMap },
+              ],
+            },
+          },
+          { offset: { line: 6, column: 8 }, map: normalizedEmptyMap },
+        ],
+      });
+    });
   });
 
   describe('unnormalizedBuild', () => {
@@ -195,6 +240,44 @@ describe('BuildMapping', () => {
         line: 1,
         column: 0,
         name: null,
+      });
+    });
+
+    it('normalizes SectionedSourceMapInput', () => {
+      const built = unnormalizedBuild`
+        ${builtCode}
+        ${{ code: builtCode.code, map: JSON.stringify(builtCode.map) }}
+        ${build`
+          ${{ code: builtCode.code, map: tracer }}
+          ${{ code: builtCode.code, map: decodedMap(tracer) as any }}
+        `}
+      `;
+      const normalizedEmptyMap = encodedMap(new TraceMap(emptyMap));
+
+      const normalized = normalizeMap(built.map);
+      assert.deepEqual(normalized, {
+        version: 3,
+        file: undefined,
+        sections: [
+          { offset: { line: 1, column: 8 }, map: normalizedBuiltMap },
+          { offset: { line: 1, column: 11 }, map: normalizedEmptyMap },
+          { offset: { line: 2, column: 8 }, map: normalizedBuiltMap },
+          { offset: { line: 2, column: 11 }, map: normalizedEmptyMap },
+          {
+            offset: { line: 3, column: 8 },
+            map: {
+              version: 3,
+              file: undefined,
+              sections: [
+                { offset: { line: 1, column: 10 }, map: normalizedBuiltMap },
+                { offset: { line: 1, column: 13 }, map: normalizedEmptyMap },
+                { offset: { line: 2, column: 10 }, map: normalizedBuiltMap },
+                { offset: { line: 2, column: 13 }, map: normalizedEmptyMap },
+              ],
+            },
+          },
+          { offset: { line: 6, column: 8 }, map: normalizedEmptyMap },
+        ],
       });
     });
   });

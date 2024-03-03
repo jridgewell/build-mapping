@@ -139,7 +139,7 @@ function pushSourceless<T>(code: string, value: string, sections: NormalizeSecti
 /**
  * Normalizes the map output of `build` to be compatible with any library that supports source maps.
  */
-function normalizeMap<T extends SectionedSourceMapInput>(
+export function normalizeMap<T extends SectionedSourceMapInput>(
   map: T extends NormalizedSectionedSourceMap ? never : T,
 ): NormalizedSourceMap {
   const parsed: Exclude<SectionedSourceMapInput, string> =
