@@ -1,28 +1,25 @@
 import { TraceMap, encodedMap } from '@jridgewell/trace-mapping';
 import type {
-  DecodedSourceMap,
   EncodedSourceMap,
   SectionedSourceMapInput,
   SectionedSourceMapXInput,
   SectionXInput,
 } from '@jridgewell/trace-mapping';
 
-export type DynamicCode = string | BuiltCode;
-export type BuiltCode = {
+export type DynamicCode = string | BuiltCode<SectionedSourceMapInput>;
+export interface BuiltCode<T extends OutputMap> {
   code: string;
-  map: SectionedSourceMapInput;
-};
+  map: T;
+}
 
+type OutputMap = SectionedSourceMapInput | NormalizedSectionedSourceMap;
 export type NormalizedSourceMap = EncodedSourceMap | NormalizedSectionedSourceMap;
 export interface NormalizedSectionedSourceMap {
   file?: string | null;
   sections: NormalizedSection[];
   version: 3;
 }
-export interface NormalizedSection {
-  offset: { line: number; column: number };
-  map: EncodedSourceMap | NormalizedSectionedSourceMap;
-}
+export type NormalizedSection = NormalizerSection<NormalizedSectionedSourceMap>;
 export type NormalizedBuiltCode = {
   code: string;
   map: NormalizedSourceMap;
@@ -33,11 +30,11 @@ const CARRIAGE_RETURN = '\r'.charCodeAt(0);
 
 // Used to mark a sourceless section after a sourced section, ensuring that the sourced section does
 // not overlap into our sourceless section.
-const EMPTY_MAP: DecodedSourceMap = {
+const EMPTY_MAP: EncodedSourceMap = {
   version: 3,
   sources: [],
   names: [],
-  mappings: [],
+  mappings: '',
 };
 
 // We use module-level variables to handle multiple return values without creating temporary
@@ -49,15 +46,16 @@ let lastIsSourceless = true;
 
 // We use a call interface instead of the regular function types, allowing us to publicly advertise
 // the rest args without actually constructing it.
-interface Builder {
-  (
-    strings: TemplateStringsArray,
-    ...args: DynamicCode[]
-  ): {
-    code: string;
-    map: SectionedSourceMapXInput;
-  };
+interface Builder<T extends OutputMap> {
+  (strings: TemplateStringsArray, ...args: DynamicCode[]): { code: string; map: T };
 }
+
+/**
+ * Builds a combined source and source map from many inputs.
+ */
+export const normalizedBuild: Builder<NormalizedSectionedSourceMap> =
+  /*#__PURE__*/ makeBuild(normalizeMap);
+export { normalizedBuild as build };
 
 /**
  * Builds a combined source and source map from many inputs.
@@ -65,47 +63,49 @@ interface Builder {
  * **Note** that the output of this function is only compatible with `@jridgewell/trace-mapping`. If
  * you wish to use this with another library, call `normalize`.
  */
-export const build: Builder = function (strings) {
-  let code = strings[0];
-  const sections: SectionXInput[] = [];
+export const unnormalizedBuild: Builder<SectionedSourceMapInput> = /*#__PURE__*/ makeBuild(
+  (map) => map,
+);
 
-  lastIsSourceless = true;
-  line = 0;
-  column = 0;
-  updatePosition(code);
-
-  for (let i = 1; i < arguments.length; i++) {
-    const value = arguments[i] as DynamicCode;
-    const next = strings[i];
-    if (typeof value === 'string') {
-      code = pushSourceless(code, value, sections);
-    } else {
-      code = pushSource(code, value, sections);
-    }
-    code = pushSourceless(code, next, sections);
-  }
-
-  const map = { version: 3 as const, sections };
-  return { code, map };
+type Normalizer<T extends OutputMap> = (map: SectionedSourceMapInput) => NormalizerReturn<T>;
+type NormalizerSection<T extends OutputMap> = {
+  offset: { line: number; column: number };
+  map: NormalizerReturn<T>;
 };
+type NormalizerReturn<T extends OutputMap> = T extends NormalizedSectionedSourceMap
+  ? NormalizedSourceMap
+  : SectionedSourceMapInput;
+function makeBuild<T extends OutputMap>(normalizer: Normalizer<T>): Builder<T> {
+  return function (strings) {
+    let code = strings[0];
+    const sections: NormalizerSection<T>[] = [];
 
-/**
- * Normalizes the output of `build` to be compatible with any library that supports source maps.
- */
-export function normalize(built: BuiltCode): NormalizedBuiltCode {
-  const { code, map } = built;
-  return { code, map: normalizeMap(map) };
-}
+    lastIsSourceless = true;
+    line = 0;
+    column = 0;
+    updatePosition(code);
 
-/**
- * Normalizes the map output of `build` to be compatible with any library that supports source maps.
- */
-export function normalizeMap(map: SectionedSourceMapInput): NormalizedSourceMap {
-  const parsed: Exclude<SectionedSourceMapInput, string> =
-    typeof map === 'string' ? JSON.parse(map) : map;
+    for (let i = 1; i < arguments.length; i++) {
+      const value = arguments[i] as DynamicCode;
+      const next = strings[i];
+      if (typeof value === 'string') {
+        code = pushSourceless(code, value, sections);
+      } else {
+        const { code: c, map } = value;
 
-  if ('sections' in parsed) return normalizeSectionedMap(parsed);
-  return encodedMap(new TraceMap(parsed));
+        // We always push sections for mapped code.
+        sections.push({ offset: { line, column }, map: normalizer(map) });
+        lastIsSourceless = false;
+
+        updatePosition(c);
+        code += c;
+      }
+      code = pushSourceless(code, next, sections);
+    }
+
+    const map = { version: 3 as const, sections };
+    return { code, map };
+  } as Builder<T>;
 }
 
 // Scans code looking for newlines, recording the current line number and final column number.
@@ -129,7 +129,11 @@ function updatePosition(code: string) {
 
 // A sourceless section is either the static source text from the tagged template literal, or it's a
 // dynamically evaluated string.
-function pushSourceless(code: string, value: string, sections: SectionXInput[]): string {
+function pushSourceless<T extends OutputMap>(
+  code: string,
+  value: string,
+  sections: NormalizerSection<T>[],
+): string {
   if (value.length === 0) return code;
 
   // If the previous section is sourceless, then we don't need to push a new mapping. The previous
@@ -141,15 +145,17 @@ function pushSourceless(code: string, value: string, sections: SectionXInput[]):
   return code + value;
 }
 
-function pushSource(code: string, value: BuiltCode, sections: SectionXInput[]): string {
-  const { code: c, map } = value;
+/**
+ * Normalizes the map output of `build` to be compatible with any library that supports source maps.
+ */
+function normalizeMap<T extends SectionedSourceMapInput>(
+  map: T extends NormalizedSectionedSourceMap ? never : T,
+): NormalizedSourceMap {
+  const parsed: Exclude<SectionedSourceMapInput, string> =
+    typeof map === 'string' ? JSON.parse(map) : map;
 
-  // We always push sections for mapped code.
-  sections.push({ offset: { line, column }, map });
-  lastIsSourceless = false;
-
-  updatePosition(c);
-  return code + c;
+  if ('sections' in parsed) return normalizeSectionedMap(parsed);
+  return encodedMap(new TraceMap(parsed));
 }
 
 function normalizeSectionedMap(map: SectionedSourceMapXInput): NormalizedSectionedSourceMap {
