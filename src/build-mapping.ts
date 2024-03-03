@@ -6,13 +6,12 @@ import type {
   SectionXInput,
 } from '@jridgewell/trace-mapping';
 
-export type DynamicCode = string | BuiltCode<SectionedSourceMapInput>;
-export interface BuiltCode<T extends OutputMap> {
+export type DynamicCode = string | BuiltCode;
+export interface BuiltCode {
   code: string;
-  map: T;
+  map: SectionedSourceMapInput;
 }
 
-type OutputMap = SectionedSourceMapInput | NormalizedSectionedSourceMap;
 export type NormalizedSourceMap = EncodedSourceMap | NormalizedSectionedSourceMap;
 export interface NormalizedSectionedSourceMap {
   file?: string | null;
@@ -20,10 +19,10 @@ export interface NormalizedSectionedSourceMap {
   version: 3;
 }
 export type NormalizedSection = NormalizeSection<true>;
-export type NormalizedBuiltCode = {
+export interface NormalizedBuiltCode {
   code: string;
   map: NormalizedSourceMap;
-};
+}
 
 const NEWLINE = '\n'.charCodeAt(0);
 const CARRIAGE_RETURN = '\r'.charCodeAt(0);
@@ -45,6 +44,7 @@ let column = 0;
 let lastIsSourceless = true;
 
 type Normalize<T> = T extends true ? NormalizedSourceMap : SectionedSourceMapInput;
+type NormalizeOut<T> = T extends true ? NormalizedSectionedSourceMap : SectionedSourceMapInput;
 type NormalizeSection<T> = {
   offset: { line: number; column: number };
   map: Normalize<T>;
@@ -52,7 +52,7 @@ type NormalizeSection<T> = {
 // We use a call interface instead of the regular function types, allowing us to publicly advertise
 // the rest args without actually constructing it.
 interface Builder<T> {
-  (strings: TemplateStringsArray, ...args: DynamicCode[]): { code: string; map: Normalize<T> };
+  (strings: TemplateStringsArray, ...args: DynamicCode[]): { code: string; map: NormalizeOut<T> };
 }
 
 /**
@@ -65,7 +65,7 @@ export { normalizedBuild as build };
  * Builds a combined source and source map from many inputs.
  *
  * **Note** that the output of this function is only compatible with `@jridgewell/trace-mapping`. If
- * you wish to use this with another library, call `normalize`.
+ * you wish to use this with another library, call `normalizeMap`.
  */
 export const unnormalizedBuild: Builder<false> = /*#__PURE__*/ makeBuild(false);
 
